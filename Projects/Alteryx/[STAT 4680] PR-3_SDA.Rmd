@@ -1,0 +1,187 @@
+---
+title: "STAT4680_PR3_EDA"
+author: "Michael Ghattas & Peter KInder"
+date: "4/25/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+# install.packages("SmartEDA")
+```
+
+```{r}
+# library(SmartEDA)
+rawData = read.csv("~/Desktop/Public_Data_1.csv")
+# ExpReport(rawData, label = NULL, op_file = "Report.html", op_dir = getwd())
+data = data.frame(rawData[ , -1])
+```
+
+```{r}
+# Exploring significant features selection
+lMod = lm(data$CertScore ~ ., data = data)
+summary(lMod)
+plot(lMod)
+```
+
+```{r}
+# Exploring significant features selection
+lMod2 = lm(data$CertScore ~ data$BlueScore + data$GreenScore + data$Blue3 + data$Blue13 + data$Blue15 + data$Green2 + data$Green10 + data$Green15 + data$Blue18 + data$Green32 + data$Green33 + data$Green35 + data$Orange13 + data$Yellow10 + data$Yellow25 + data$AvgSecondsPerSession, data = data)
+summary(lMod2)
+plot(lMod2)
+```
+
+```{r}
+# Exploring significant features selection
+lMod3 = lm(data$CertScore ~ data$BlueScore + data$Green2 + data$Green15 + data$Blue18 + data$AvgSecondsPerSession, data = data)
+summary(lMod3)
+plot(lMod3)
+```
+
+```{r}
+# Exploring significant features selection
+lMod4 = lm(data$CertScore ~ data$BlueScore + data$Green2 + data$AvgSecondsPerSession, data = data)
+summary(lMod4)
+plot(lMod4)
+```
+
+```{r}
+# Exploring best model
+AIC(lMod, lMod2, lMod3, lMod4)
+BIC(lMod, lMod2, lMod3, lMod4)
+```
+
+```{r}
+# Testing best model for prediction
+library(ggplot2)
+
+train = data[1:167, ]
+test = data[168:209, ]
+
+lMod5 = lm(data$CertScore ~ data$BlueScore + data$Green2 + data$AvgSecondsPerSession, data = train)
+preds <- predict(lMod5, data = test, type = "response")
+sqrt(mean((preds[168:209] - test$CertScore)^2))
+
+ggplot(data, aes(x = predict(lMod5), y = `CertScore`)) +
+  geom_point() +
+  geom_abline(intercept = 0, slope = 1) +
+  labs(x = 'Predicted Values', y = 'Actual Values', title = 'Predicted vs. Actual Values')
+```
+
+```{r}
+# Exploring Lasso regression
+library(glmnet)
+
+# Define predictors and response variables
+x = as.matrix(data)
+y = data$CertScore
+
+# Fit Lasso model
+lassoModel = glmnet(x, y, alpha = 1)
+
+# Plot coefficients of the Lasso model
+plot(lassoModel, xvar = "lambda", label = TRUE)
+
+# Find optimal lambda value
+cvModel = cv.glmnet(x, y, alpha = 1)
+lambdaOpt = cvModel$lambda.min
+
+# Refit Lasso model with optimal lambda value
+lassoModelOpt = glmnet(x, y, alpha = 1)
+
+# Print summary of Lasso model
+print(summary(lassoModelOpt))
+
+# Find coefficients of best model
+lasMod = glmnet(x, y, alpha = 1, lambda = 'best_lambda')
+coef(lasMod)
+```
+
+
+```{r}
+# Exploring Lasso regression
+library(glmnet)
+
+# Define predictors and response variables
+x = as.matrix(data[, c("BlueScore", "Green2", "AvgSecondsPerSession")])
+y = data$CertScore
+
+# Fit Lasso model
+lassoModel = glmnet(x, y, alpha = 1)
+
+# Plot coefficients of the Lasso model
+plot(lassoModel, xvar = "lambda", label = TRUE)
+
+# Find optimal lambda value
+cvModel = cv.glmnet(x, y, alpha = 1)
+lambdaOpt = cvModel$lambda.min
+
+# Refit Lasso model with optimal lambda value
+lassoModelOpt = glmnet(x, y, alpha = 1)
+
+# Print summary of Lasso model
+print(summary(lassoModelOpt))
+
+# Find coefficients of best model
+lasMod2 = glmnet(x, y, alpha = 1, lambda = 'best_lambda')
+coef(lasMod2)
+```
+```{r}
+# Exploring Ridge regression
+library(glmnet)
+
+# Define predictors and response variables
+x = as.matrix(data)
+y = data$CertScore
+
+# Fit Ridge model
+ridgeModel = glmnet(x, y, alpha = 0)
+
+# Plot coefficients of the Ridge model
+plot(ridgeModel, xvar = "lambda", label = TRUE)
+
+# Find optimal lambda value
+cvModel = cv.glmnet(x, y, alpha = 0)
+lambdaOpt = cvModel$lambda.min
+
+# Refit Ridge model with optimal lambda value
+ridgeModelOpt <- glmnet(x, y, alpha = 0)
+
+# Print summary of Ridge model
+print(summary(ridgeModelOpt))
+
+# Find coefficients of best model
+ridMod = glmnet(x, y, alpha = 0, lambda = 'best_lambda')
+coef(ridMod)
+```
+
+
+```{r}
+# Exploring Ridge regression
+library(glmnet)
+
+# Define predictors and response variables
+x = as.matrix(data[, c("BlueScore", "Green2", "AvgSecondsPerSession")])
+y = data$CertScore
+
+# Fit Ridge model
+ridgeModel <- glmnet(x, y, alpha = 0)
+
+# Plot coefficients of the Ridge model
+plot(ridgeModel, xvar = "lambda", label = TRUE)
+
+# Find optimal lambda value
+cvModel = cv.glmnet(x, y, alpha = 0)
+lambdaOpt = cvModel$lambda.min
+
+# Refit Ridge model with optimal lambda value
+ridgeModelOpt = glmnet(x, y, alpha = 0)
+
+# Print summary of Ridge model
+print(summary(ridgeModelOpt))
+
+# Find coefficients of best model
+ridMod2 = glmnet(x, y, alpha = 0, lambda = 'best_lambda')
+coef(ridMod2)
+```
+

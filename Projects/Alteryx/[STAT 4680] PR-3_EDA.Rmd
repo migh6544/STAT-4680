@@ -1,0 +1,19 @@
+---
+title: "STAT4680_PR3_EDA"
+author: "Michael Ghattas & Peter KInder"
+date: "4/25/2023"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+# install.packages("SmartEDA")
+```
+
+```{r}
+library(SmartEDA)
+data = data.frame(read.csv("~/Desktop/Public_Data_1.csv"))
+ExpReport(data, label = NULL, op_file = "Report.html", op_dir = getwd())
+```
+
+

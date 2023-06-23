@@ -1,0 +1,122 @@
+---
+title: "Wind"
+author: "Peter Kinder"
+date: "`r Sys.Date()`"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+Wind <- read.csv("full_monthly_storms.csv")
+Wind$Month.1 <- as.factor(Wind$Month.1)
+Wind
+plot(Wind$Month, Wind$Windstorms, type = "l")
+```
+
+```{r}
+library(forecast)
+wind.arima <- auto.arima(Wind$Windstorms, max.order = 30, max.p = 20, max.q = 10, max.P = 10, max.Q = 10, start.p = 20, max.D = 8, stepwise = FALSE, parallel = TRUE)
+summary(wind.arima)
+```
+
+```{r}
+#coefs p-values
+(1-pnorm(abs(wind.arima$coef)/sqrt(diag(wind.arima$var.coef))))*2 < 0.5
+```
+
+
+```{r}
+library(ggplot2)
+wind.lm <- lm(Windstorms ~ Month, data = Wind)
+summary(wind.lm)
+ggplot(data = Wind, aes(x = Month, y = Windstorms)) + geom_line() + stat_smooth(method = "lm")
+```
+
+```{r}
+preds <- predict(wind.lm)
+sqrt(mean((preds - Wind$Windstorms)^2))
+```
+
+```{r}
+plot(Wind$Month, Wind$Windstorms, type = "l")
+lines(fitted(wind.arima), col = "blue")
+```
+
+```{r}
+y <- Wind$Windstorms
+```
+
+```{r}
+create.lags.df <- function(lags, y){
+  df <- data.frame(y = y)
+  for (i in 1:lags){
+    index <- i + 1
+    lag <- c(rep(NA, i), y[length(y):index])
+    df <- cbind(df, lag)
+  }
+  names <- c("y")
+  for (i in 1:lags){
+    names <- c(names, paste("Lag", i, sep = ""))
+  }
+  names(df) <- names
+  df <- cbind(df, Wind$Month.1)
+  return(df)
+}
+
+months <- 36
+
+df <- create.lags.df(months, y)
+df <- na.omit(df)
+
+lm.two.year <- lm(y ~ ., data = df)
+summary(lm.two.year)
+preds <- predict(lm.two.year)
+sqrt(mean((preds - df$y)^2))
+
+lm.aic <- step(lm.two.year, trace = 0, direction = c("both"))
+
+preds <- predict(lm.aic)
+sqrt(mean((preds - df$y)^2))
+
+summary(lm.two.year)
+
+summary(lm.aic)
+
+plot(Wind$Month, Wind$Windstorms, type = "l")
+lines(c(rep(NA, months), fitted(lm.aic)), col = "blue")
+```
+```{r}
+plot(lm.aic)
+```
+
+```{r}
+decomposed <- decompose(ts(Wind$Windstorms, frequency = 12, start = c(2001, 1)))
+decomposed$trend
+```
+
+```{r}
+summary(lm.aic)
+sim <- arima.sim(n = 252, list(ar = c(0.10826, 0.23490, 0, 0, 0, 0, 0, 
+                                      -0.11370, 0, 0.09033, 0, -0.21746,
+                                      0, 0, 0.16968, 0, 0, 0, -0.17127,
+                                      0, 0, 0, 0, -0.12018, 0.09612, 0,
+                                      0, 0.10275, 0, -0.11305, -0.16941,
+                                      0, 0, -0.11002, 0.13733)))
+plot(sim + 5.05235, ylim = c(0, 11))
+lines( Wind$Windstorms, type = "l", col = "blue")
+plot(Wind$Month, Wind$Windstorms, type = "l", col = "blue")
+lines(c(rep(NA, months), fitted(lm.aic)))
+plot(Wind$Windstorms - (sim + 5.05235))
+```
+
+```{r}
+new.wind.arima <- arima(y, order = c(3, 0, 1))
+```
+
+```{r}
+step(new.wind.arima)
+```
+

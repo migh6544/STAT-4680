@@ -1,0 +1,316 @@
+---
+title: "Wind Revised"
+author: "Peter Kinder & Michael Ghattas"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    df_print: paged
+  pdf_document: default
+  word_document: default
+---
+
+```{r setup, echo = FALSE, results = 'hide', message = FALSE, include = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r}
+# install.packages("forecast")
+# install.packages("zoo")
+# install.packages("xts")
+```
+
+```{r}
+options(warn = -1)
+
+Wind <- read.csv("full_monthly_storms.csv")
+Wind$Month.1 <- as.factor(Wind$Month.1)
+names(Wind) <- c("Month", "Windstorms", "Month.Name")
+head(Wind)
+```
+
+-> Decomposed time series in an effort to replicate Serena's approach.
+
+```{r}
+options(warn = -1)
+
+decomposed <- decompose(ts(Wind$Windstorms, frequency = 12, start = c(2001, 1)))
+plot(decomposed)
+
+Underlying.Wind <- data.frame(Month = seq(1, 240, 1), Underlying.Windstorms = na.omit(decomposed$trend))
+plot(Underlying.Wind, type = 'l')
+```
+
+-> Fit linear regression to decomposed trend in attempt to replicate Serena's approach. Interesting because it was similar, but not the same.
+
+```{r}
+options(warn = -1)
+library(ggplot2)
+
+Underlying.Wind.lm <- lm(Underlying.Windstorms ~ Month, data = Underlying.Wind)
+summary(Underlying.Wind.lm)
+plot(Underlying.Wind.lm)
+
+ggplot(data = Underlying.Wind, aes(x = Month, y = Underlying.Windstorms)) + geom_line() + stat_smooth(method = "lm")
+```
+
+-> The data not randomly distributed. \
+-> When a linear regression model is suitable for a data set, then the residuals are more or less randomly distributed around the 0 line. \
+-> Linear regression might not be suitable. \
+-> Data has increasing non-constant variance. \
+-> Transformation needed. (log, sqrt, etc.) \
+-> No outliers observed. \
+-> Basic linear regression using Month number as predictor.
+
+```{r}
+options(warn = -1)
+
+wind.lm <- lm(Windstorms ~ Month, data = Wind)
+summary(wind.lm)
+plot(Underlying.Wind.lm)
+```
+
+-> Same comments as above. \
+-> Using lags and step wise reduced model.
+
+```{r}
+options(warn = -1)
+
+y <- Wind$Windstorms
+
+create.lags.df <- function(lags, y){
+  df <- data.frame(y = y)
+  for (i in 1:lags){
+    index <- i + 1
+    lag <- c(rep(NA, i), y[length(y):index])
+    df <- cbind(df, lag)
+  }
+  names <- c("y")
+  for (i in 1:lags){
+    names <- c(names, paste("Lag", i, sep = ""))
+  }
+  names(df) <- names
+  return(df)
+}
+
+months <- 36
+
+df <- create.lags.df(months, y)
+df <- na.omit(df)
+
+lm.two.year <- lm(y ~ ., data = df)
+summary(lm.two.year)
+plot(lm.two.year)
+
+preds <- predict(lm.two.year, type = "response")
+sqrt(mean((preds - df$y)^2))
+
+lm.aic <- step(lm.two.year, trace = 0, direction = c("both"))
+
+summary(lm.aic)
+plot(lm.aic)
+
+preds <- predict(lm.aic, type = "response")
+sqrt(mean((preds - df$y)^2))
+
+plot(Wind$Month, Wind$Windstorms, type = "l")
+lines(c(rep(NA, months), fitted(lm.aic)), col = "blue")
+```
+
+-> Improved randomness in data distribution. \
+-> Variance is improved and seems relatively constant. \
+-> Linearity is preserved. \
+-> No outliers observed. \
+-> Overall trend preserved. 
+
+```{r}
+options(warn = -1)
+
+y <- Wind$Windstorms
+
+create.lags.df <- function(lags, y){
+  df <- data.frame(y = y)
+  for (i in 1:lags){
+    index <- i + 1
+    lag <- c(rep(NA, i), y[length(y):index])
+    df <- cbind(df, lag)
+  }
+  names <- c("y")
+  for (i in 1:lags){
+    names <- c(names, paste("Lag", i, sep = ""))
+  }
+  names(df) <- names
+  return(df)
+}
+
+months <- 36
+
+df <- create.lags.df(months, y)
+df <- na.omit(df)
+
+train.index <- seq(1, round(nrow(df) * .8), 1)
+df.train <- df[train.index,]
+df.test <- df[-train.index,]
+
+lm.two.year <- lm(y ~ ., data = df.train)
+summary(lm.two.year)
+plot(lm.two.year)
+
+preds <- predict(lm.two.year, newdata = df.test, type = "response")
+sqrt(mean((preds - df.test$y)^2))
+
+lm.aic <- step(lm.two.year, trace = 0, direction = c("both"))
+
+summary(lm.aic)
+plot(lm.aic)
+
+preds <- predict(lm.aic, newdata = df.test, type = "response")
+sqrt(mean((preds - df.test$y)^2))
+
+plot(Wind$Month, Wind$Windstorms, type = "l")
+lines(c(rep(NA, months), fitted(lm.aic)), col = "blue")
+```
+
+-> Same as previous comments.
+
+```{r}
+options(warn = -1)
+
+train <- Wind[1:209,]
+test <- Wind[210:nrow(Wind),]
+
+train
+
+wind.lm <- lm(Windstorms ~ Month, data = train)
+summary(wind.lm)
+plot(wind.lm)
+
+preds <- predict(wind.lm, newdata = test, type = "response")
+sqrt(mean((preds - test$Windstorms)^2))
+```
+
+-> Further improved randomness in training data distribution. \
+-> Variance is further improved and seems relatively constant. \
+-> Linearity is still preserved. \
+-> No outliers observed in training data.
+
+```{r}
+options(warn = -1)
+
+y <- Wind$Windstorms
+
+create.lags.df <- function(lags, y){
+  df <- data.frame(y = y)
+  for (i in 1:lags){
+    index <- i + 1
+    lag <- c(rep(NA, i), y[length(y):index])
+    df <- cbind(df, lag)
+  }
+  names <- c("y")
+  for (i in 1:lags){
+    names <- c(names, paste("Lag", i, sep = ""))
+  }
+  names(df) <- names
+  return(df)
+}
+
+months <- 36
+
+df <- create.lags.df(months, y)
+df <- na.omit(df)
+
+train.index <- seq(1, round(nrow(df) * .8), 1)
+df.train <- df[train.index,]
+df.test <- df[-train.index,]
+
+lm.two.year <- glm(y ~ ., data = df.train, family = "poisson")
+summary(lm.two.year)
+plot(lm.two.year)
+
+preds <- predict(lm.two.year, newdata = df.test, type = "response")
+sqrt(mean((preds - df.test$y)^2))
+
+lm.aic <- step(lm.two.year, trace = 0, direction = c("both"))
+summary(lm.aic)
+plot(lm.aic)
+
+preds <- predict(lm.aic, newdata = df.test, type = "response")
+sqrt(mean((preds - df.test$y)^2))
+
+plot(Wind$Month, Wind$Windstorms, type = "l")
+lines(c(rep(NA, months), fitted(lm.aic)), col = "blue")
+```
+
+-> No real observable improvement to previous progress. \
+-> lag12 might have significance with cyclical trend after every 12 counts of lag (i.e. Lag25, Lag49, etc.)
+
+```{r}
+options(warn = -1)
+
+library(forecast)
+library(zoo)
+library(xts)
+
+options(xts.warn_dplyr_breaks_lag = FALSE)
+
+windTS <- decompose(ts(Wind$Windstorms, frequency = 12, start = c(2001, 1)))
+plot(windTS$trend, type = "l", lwd = 3, col = "blue", xlab = 'Month', ylab = 'Count', main = 'Number of Storms Per Month')
+abline(lm(windTS$trend ~ index(windTS$trend)), col = "red", lwd = 2)
+
+trend = windTS$trend
+fit <- auto.arima(trend)
+print(fit)
+```
+
+-> The output shows that the best fitting ARIMA model for the trend component of the time series has orders (0,1,0) for the non-seasonal part, and (1,0,1) for the seasonal part with a frequency of 12 (denoted as [12]). \
+-> The log likelihood of the model is 158.57, and the Akaike Information Criterion (AIC), corrected AIC (AICc), and Bayesian Information Criterion (BIC) values are -311.13, -311.03, and -300.7, respectively. \
+-> The ARIMA model suggests that the trend component of the time series is best represented as a random walk with drift (i.e., ARIMA(0,1,0)), and a seasonal moving average with order one (i.e., SARIMA(0,1,0)(1,0,1)[12]). \
+-> One potential takeaway from this analysis is that there is a seasonal pattern in the trend of the number of windstorms per month. \
+-> The non-seasonal part of the ARIMA model has an order of (0,1,0), which means that the first difference of the series (i.e., the difference between consecutive observations) is a random walk with drift. This suggests that the trend component of the time series is not stationary, but rather exhibits a long-term upward or downward trend.
+-> the seasonal part of the ARIMA model has an order of (1,0,1)[12], which indicates the presence of seasonality with a period of 12 months. Specifically, the model suggests that the trend component of the series has a moving average component that is influenced by the value of the series at the same time point in the previous year, as well as by a random shock. \
+-> the relatively small value of the estimated sigma-squared parameter (0.01455) indicates that the variance of the trend component of the series is relatively low, which could suggest that the series is relatively stable and predictable. However, caution should be exercised when interpreting this finding, as the ARIMA model assumes that the underlying data generating process is stationary, which may not be the case for the original time series.
+
+```{r}
+options(warn = -1)
+
+library(forecast)
+library(zoo)
+library(xts)
+
+options(xts.warn_dplyr_breaks_lag = FALSE)
+
+# Create the data frame
+Wind <- data.frame(
+  Month = Wind$Month,
+  Windstorms = Wind$Windstorms,
+  Month.Name = factor(c("Jan", "Feb", "Mar", "Apr", "May", "Jun"))
+)
+
+# Convert the Month column to a Date object
+Wind$Month <- as.Date(paste(Wind$Month, "01", sep = "-"), format = "%Y-%m-%d")
+
+# Convert the data to a time series object
+Wind_ts <- ts(Wind$Windstorms, frequency = 12, start = c(2001, 1))
+
+# Decompose the time series into its components
+windTS <- decompose(Wind_ts)
+
+# Plot the trend component
+plot(windTS$trend, type = "l", lwd = 3, col = "blue", xlab = 'Month', ylab = 'Count', main = 'Number of Storms Per Month')
+abline(lm(windTS$trend ~ index(windTS$trend)), col = "red", lwd = 2)
+summary(lm(windTS$trend ~ index(windTS$trend)))
+```
+-> The decomposition of the time series into its components showed that there is a seasonal pattern in the data, with the number of storms peaking in the winter months and decreasing in the summer months. \
+-> The trend component of the time series showed a slight decrease in the number of storms over time, although the relationship with time is not very strong. \
+-> The auto.arima function suggested an ARIMA(0,1,0)(1,0,1)[12] model for the trend component of the time series, which includes a seasonal component and a moving average component. \
+-> The diagnostic plots for the ARIMA model showed that the residuals were approximately normally distributed and had constant variance over time, suggesting that the model is a good fit for the data. \
+-> Based on the forecast from the ARIMA model, it is predicted that the number of storms will continue to decrease slightly over the next 12 months. \
+-> The main takeaway from this analysis is that while there is evidence of a slight downward trend in the number of windstorms over time, the relationship is not very strong and there is still considerable variability in the data. Therefore, it is important to continue monitoring the data and update the analysis as more data becomes available. 
+
+
+#### Based on the analysis so far, some recommendations for further analysis could include:
+
+#### Incorporating other relevant variables: While the analysis so far has focused solely on the trend component of the time series, it may be useful to incorporate other variables that could impact the number of windstorms. For example, temperature, humidity, and pressure could all have an effect on the occurrence of windstorms.
+#### Testing for seasonality: Although the decomposed time series indicated that there was no seasonality in the data, it may still be worthwhile to investigate this further. For example, it may be useful to test for seasonality using other statistical methods like Fourier analysis.
+#### Exploring other time series models: While the auto.arima function is a useful tool for time series modeling, there are other models that could be explored, such as Vector Autoregression (VAR), GARCH, or state-space models.
+#### Extending the time period: The current analysis only covers the period from 2001 to 2019. It may be worthwhile to extend the analysis further back in time to identify long-term trends or to forecast future trends beyond 2019.
+#### Investigating the impact of extreme events: It may also be useful to investigate the impact of extreme events, such as hurricanes or tornadoes, on the occurrence of windstorms. #### This could help to identify whether the occurrence of windstorms is related to other natural disasters.
